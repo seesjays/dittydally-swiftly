@@ -319,7 +319,7 @@ def create_album_container_with_basedata(swift_service, album):
 
 def upload_album_config(swift_service, album, config):
     album_id = album.id()
-    config_id = str(uuid.uuid4())
+    config_id = str(uuid.uuid4())[:8]
 
     temp_file_path = f"./temp/temp_{album_id}_{config_id}.json"
     upload_object = None
@@ -350,7 +350,7 @@ def upload_album_config(swift_service, album, config):
                 return True
 
         os.remove(temp_file_path)
-        return f"{config_id}.json"
+        return f"{config_id}"
 
     except SwiftError as e:
         app.logger.error(f"Failed to upload base_data.json: {e.value}")
