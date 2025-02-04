@@ -5,6 +5,7 @@ import uuid
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from requests import HTTPError
 from swiftclient.service import (
     ClientException,
@@ -18,7 +19,7 @@ from dittydally import DittyDallyMusicClient
 load_dotenv()
 
 app = Flask(__name__)
-
+CORS(app, origins=["https://dittydally.com", "http://localhost:4321"])
 
 MUSIC_ENDPOINT = os.environ.get("DITTYDALLY_MUSIC_ENDPOINT")
 dally = DittyDallyMusicClient(MUSIC_ENDPOINT)
