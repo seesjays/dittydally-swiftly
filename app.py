@@ -1,18 +1,24 @@
-from flask import Flask, jsonify, request
-import logging
-from requests import HTTPError
-from swiftclient.service import (
-    SwiftService,
-    SwiftError,
-    SwiftUploadObject,
-    ClientException,
-)
-from dittydally import DittyDallyMusicClient
-import os
 import json
+import logging
+import os
 import uuid
 
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request
+from requests import HTTPError
+from swiftclient.service import (
+    ClientException,
+    SwiftError,
+    SwiftService,
+    SwiftUploadObject,
+)
+
+from dittydally import DittyDallyMusicClient
+
+load_dotenv()
+
 app = Flask(__name__)
+
 
 MUSIC_ENDPOINT = os.environ.get("DITTYDALLY_MUSIC_ENDPOINT")
 dally = DittyDallyMusicClient(MUSIC_ENDPOINT)
@@ -35,6 +41,7 @@ def list_album_containers():
 
         # list calls return iterator of pages, pages have a listing of objects
         container_pages = swift.list()
+
         for page in container_pages:
             if not page["success"]:
                 app.logger.error("Failed to fetch container list")
