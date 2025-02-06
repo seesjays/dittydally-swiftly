@@ -56,7 +56,7 @@ def list_album_containers():
                 for result_obj in swift.download(
                     container_name, ["base_data.json"], options={"out_file": "-"}
                 ):
-                    if result_obj["contents"]:
+                    if "contents" in result_obj:
                         reader = result_obj["contents"]
                         json_data = swift_results_to_JSON(reader)
                         container_album_mapping[container_name] = json_data
@@ -117,7 +117,7 @@ def get_album_basedata(album_id):
             )
 
             for down_res in album_container_results:
-                if down_res["contents"]:
+                if "contents" in down_res:
                     reader = down_res["contents"]
                     result_obj = swift_results_to_JSON(reader)
 
@@ -286,7 +286,7 @@ def create_album_container_with_basedata(swift_service, album):
 
     # in mem IO object to upload
     json_string = json.dumps(base_data)
-    temp_readable = io.StringIO(json_string)
+    temp_readable = io.BytesIO(json_string.encode("utf-8"))
     upload_object = SwiftUploadObject(
         source=temp_readable,
         object_name="base_data.json",
@@ -322,7 +322,7 @@ def upload_album_config(swift_service, album, config):
 
     # in mem IO object to upload
     json_string = json.dumps(config)
-    temp_readable = io.StringIO(json_string)
+    temp_readable = io.BytesIO(json_string.encode("utf-8"))
     upload_object = SwiftUploadObject(
         source=temp_readable,
         object_name=f"{config_id}.json",
@@ -334,13 +334,13 @@ def upload_album_config(swift_service, album, config):
             container=album_id,
             objects=[upload_object],
         ):
-            if results["success"]:
+            if "success" in results and results["action"] == "upload_object":
                 app.logger.info(
                     f"Uploaded config {config_id} for album '{album.title()}'."
                 )
                 return f"{config_id}"
     except SwiftError as e:
-        app.logger.error(f"Failed to upload base_data.json: {e.value}")
+        app.logger.error(f"Failed to upload config for album {album_id}: {e.value}")
 
     app.logger.error(
         f"Failed to upload config {config_id} for album '{album.title()}'."
