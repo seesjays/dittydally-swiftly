@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import uuid
+import io
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -185,13 +186,14 @@ def list_album_configs(album_id):
 # add a new config for a poster under a container named album id
 @app.route("/albums/<album_id>", methods=["POST"])
 def add_album_config(album_id):
-    req_data = request.get_json()
+    config_data = request.get_json()
 
-    if "dally_config" not in req_data:
+    if "dally_config" not in config_data:
         return jsonify({"error": "Missing 'dally_config' in request"}), 400
 
     with SwiftService() as swift:
         album = None
+
         try:
             # load album data from spotify
             album = dally.get_spotify_album_by_id(album_id)
@@ -208,6 +210,7 @@ def add_album_config(album_id):
 
         # check if we already have a container for this album
         newContainer = False
+
         try:
             result = swift.list(container=album_id)
             for res in result:
@@ -244,8 +247,9 @@ def add_album_config(album_id):
 
         # upload new poster config
         config_upload_results = upload_album_config(
-            swift, album, req_data["dally_config"]
+            swift, album, config_data["dally_config"]
         )
+
         if config_upload_results:
             return jsonify(
                 {
@@ -272,27 +276,22 @@ def swift_results_to_JSON(reader):
 
 
 def create_album_container_with_basedata(swift_service, album):
-    # create base_data.json
-    temp_file_path = f"./temp/temp_{album.id()}.json"
-    upload_object = None
+    base_data = json.dumps(
+        {
+            "id": album.id(),
+            "title": album.title(),
+            "artists": album.artists(),
+        }
+    )
 
-    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
-    with open(temp_file_path, "w+") as f:
-        json_data = json.dumps(
-            {
-                "id": album.id(),
-                "title": album.title(),
-                "artists": album.artists(),
-            }
-        )
-
-        f.write(json_data)
-
-        upload_object = SwiftUploadObject(
-            source=temp_file_path,
-            object_name="base_data.json",
-            options={"content_type": "application/json"},
-        )
+    # in mem IO object to upload
+    json_string = json.dumps(base_data)
+    temp_readable = io.StringIO(json_string)
+    upload_object = SwiftUploadObject(
+        source=temp_readable,
+        object_name="base_data.json",
+        options={"content_type": "application/json"},
+    )
 
     try:
         upload_result = swift_service.upload(
@@ -303,15 +302,11 @@ def create_album_container_with_basedata(swift_service, album):
         for result in upload_result:
             if result["success"]:
                 app.logger.info(f"Uploaded base_data.json for album '{album.title()}'.")
+                return True
             else:
                 app.logger.error(
                     f"Failed to upload base_data.json for album '{album.title()}'."
                 )
-
-                return False
-
-        return True
-
     except SwiftError as e:
         app.logger.error(f"Failed to upload base_data.json: {e.value}")
 
@@ -322,21 +317,17 @@ def upload_album_config(swift_service, album, config):
     album_id = album.id()
     config_id = str(uuid.uuid4())[:8]
 
-    temp_file_path = f"./temp/temp_{album_id}_{config_id}.json"
-    upload_object = None
+    # add id to config for self-reference later
+    config["configId"] = config_id
 
-    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
-    with open(temp_file_path, "w+") as f:
-        config["configId"] = config_id
-        json_data = json.dumps(config)
-
-        f.write(json_data)
-
-        upload_object = SwiftUploadObject(
-            source=temp_file_path,
-            object_name=f"{config_id}.json",
-            options={"content_type": "application/json"},
-        )
+    # in mem IO object to upload
+    json_string = json.dumps(config)
+    temp_readable = io.StringIO(json_string)
+    upload_object = SwiftUploadObject(
+        source=temp_readable,
+        object_name=f"{config_id}.json",
+        options={"content_type": "application/json"},
+    )
 
     try:
         for results in swift_service.upload(
@@ -347,14 +338,13 @@ def upload_album_config(swift_service, album, config):
                 app.logger.info(
                     f"Uploaded config {config_id} for album '{album.title()}'."
                 )
-            else:
-                return True
-
-        os.remove(temp_file_path)
-        return f"{config_id}"
-
+                return f"{config_id}"
     except SwiftError as e:
         app.logger.error(f"Failed to upload base_data.json: {e.value}")
+
+    app.logger.error(
+        f"Failed to upload config {config_id} for album '{album.title()}'."
+    )
 
     return False
 
